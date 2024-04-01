@@ -6,7 +6,8 @@
   "private": true,
   "devDependencies": {
     "@nx/js": "18.2.1",
-    "nx": "18.2.1"
+    "nx": "18.2.1",
+    "prettier": "^3.2.5"
   },
   "workspaces": [
     "packages/*"
