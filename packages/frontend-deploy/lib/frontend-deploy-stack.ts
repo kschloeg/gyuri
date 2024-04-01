@@ -1,4 +1,10 @@
 import * as cdk from "aws-cdk-lib";
+import {
+  Certificate,
+  CertificateValidation,
+} from "aws-cdk-lib/aws-certificatemanager";
+import { ARecord, HostedZone, RecordTarget } from "aws-cdk-lib/aws-route53";
+import { CloudFrontTarget } from "aws-cdk-lib/aws-route53-targets";
 import { Construct } from "constructs";
 import { join } from "path";
 
@@ -18,6 +24,18 @@ export class FrontendDeployStack extends cdk.Stack {
         restrictPublicBuckets: false,
       },
       publicReadAccess: true,
+    });
+
+    const DOMAIN_NAME = "gyuri.org";
+
+    const hostedZone = new HostedZone(this, "DomainHostedZone", {
+      zoneName: DOMAIN_NAME,
+    });
+
+    const httpsCertificate = new Certificate(this, "HttpsCertificate", {
+      domainName: hostedZone.zoneName,
+      subjectAlternativeNames: [`*.${hostedZone.zoneName}`],
+      validation: CertificateValidation.fromDns(hostedZone),
     });
 
     // Deploy the built code of packages/frontend
@@ -41,8 +59,22 @@ export class FrontendDeployStack extends cdk.Stack {
           viewerProtocolPolicy:
             cdk.aws_cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         },
+        domainNames: [hostedZone.zoneName, `*.${hostedZone.zoneName}`],
+        certificate: httpsCertificate,
       }
     );
+
+    const cfRedirect = new ARecord(this, "CloudFrontRedirect", {
+      zone: hostedZone,
+      recordName: DOMAIN_NAME,
+      target: RecordTarget.fromAlias(new CloudFrontTarget(cloudFront)),
+    });
+
+    const cfWwwRedirect = new ARecord(this, "CloudFrontWWWRedirect", {
+      zone: hostedZone,
+      target: RecordTarget.fromAlias(new CloudFrontTarget(cloudFront)),
+      recordName: `www.${DOMAIN_NAME}`,
+    });
 
     new cdk.CfnOutput(this, "StaticSite Url", {
       value: staticSiteBucket.bucketWebsiteUrl,
@@ -54,6 +86,30 @@ export class FrontendDeployStack extends cdk.Stack {
       value: cloudFront.distributionDomainName,
       description: "FE URL",
       exportName: `${id}-FE-Url`,
+    });
+
+    new cdk.CfnOutput(this, "HostedZoneName", {
+      value: hostedZone.zoneName,
+      description: "Hosted Zone Name",
+      exportName: `${id}-HostedZoneId`,
+    });
+
+    new cdk.CfnOutput(this, "CertificateArn", {
+      value: httpsCertificate.certificateArn,
+      description: "Certificate ARN",
+      exportName: `${id}-CertificateArn`,
+    });
+
+    new cdk.CfnOutput(this, "CloudFrontRedirectOutput", {
+      value: cfRedirect.domainName,
+      description: "CloudFront Redirect",
+      exportName: `${id}-CloudFrontRedirectOutput`,
+    });
+
+    new cdk.CfnOutput(this, "CloudFrontWWWRedirectOutput", {
+      value: cfWwwRedirect.domainName,
+      description: "CloudFront WWW Redirect",
+      exportName: `${id}-CloudFrontWWWRedirectOutput`,
     });
   }
 }
